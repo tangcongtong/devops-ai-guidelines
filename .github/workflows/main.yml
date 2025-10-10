@@ -2,7 +2,7 @@ name: Sync fork (multi-branch) from upstream
 
 on:
   schedule:
-    - cron: "*/30 * * * *"   # 30 phút/lần (UTC) ~ mỗi 30 phút +7h ở VN
+    - cron: "0 0 * * 0"   # 30 phút/lần (UTC) ~ mỗi 30 phút +7h ở VN
   workflow_dispatch: {}       # Cho phép bấm chạy tay
 
 permissions:
