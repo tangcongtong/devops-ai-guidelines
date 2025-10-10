@@ -1,45 +1,60 @@
-name: Sync Fork
+name: Sync fork (multi-branch) from upstream
 
 on:
   schedule:
-    - cron: '0 * * * *'  # Tự động chạy mỗi giờ
-  workflow_dispatch:      # Cho phép chạy thủ công từ tab Actions
+    - cron: "*/30 * * * *"   # 30 phút/lần (UTC) ~ mỗi 30 phút +7h ở VN
+  workflow_dispatch: {}       # Cho phép bấm chạy tay
+
+permissions:
+  contents: write
+
+env:
+  UPSTREAM_OWNER: VersusControl
+  UPSTREAM_REPO:  devops-ai-guidelines
 
 jobs:
   sync:
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        branch: [main, docs]   # Thêm tên nhánh khác nếu sau này repo có thêm
+      fail-fast: false
 
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
         with:
-          # Cần fetch toàn bộ lịch sử để merge
           fetch-depth: 0
 
-      - name: Sync fork with upstream repository
+      - name: Add upstream & fetch
         run: |
-          # Thay thế bằng URL .git của repository GỐC
-          UPSTREAM_REPO="https://github.com/VersusControl/devops-ai-guidelines.git"
-          
-          # Lấy tên branch mặc định của fork (thường là main hoặc master)
-          LOCAL_BRANCH=$(git rev-parse --abbrev-ref HEAD)
-          
-          # Cấu hình Git
-          git config --global user.name "${{ github.actor }}"
-          git config --global user.email "${{ github.actor }}@users.noreply.github.com"
-          
-          # Thêm remote cho repository gốc
-          git remote add upstream $UPSTREAM_REPO
-          git fetch upstream
-          
-          # Merge các thay đổi từ branch mặc định của repo gốc
-          # LƯU Ý: Thay 'main' nếu branch mặc định của repo gốc là 'master'
-          if git merge upstream/main; then
-            echo "Successfully merged from upstream/main."
+          git remote add upstream https://github.com/${UPSTREAM_OWNER}/${UPSTREAM_REPO}.git
+          git fetch upstream --prune --tags
+
+      # Nếu nhánh chưa tồn tại trong fork, tạo từ upstream
+      - name: Ensure branch exists locally (create from upstream if missing)
+        run: |
+          BR=${{ matrix.branch }}
+          if git show-ref --verify --quiet refs/heads/$BR; then
+            echo "Local branch $BR exists."
           else
-            echo "Merge from upstream/main failed. Trying upstream/master..."
-            git merge --abort
-            git merge upstream/master
+            echo "Create local branch $BR from upstream/$BR"
+            git checkout -b $BR upstream/$BR
           fi
-          
-          # Đẩy các thay đổi lên fork của bạn
-          git push origin $LOCAL_BRANCH
+
+      - name: Fast-forward ${{ matrix.branch }} from upstream
+        run: |
+          BR=${{ matrix.branch }}
+          git checkout $BR
+          # Thử fast-forward; nếu không FF được (lịch sử lệch) thì bỏ qua để an toàn
+          if git merge --ff-only upstream/$BR; then
+            echo "Fast-forward $BR OK"
+          else
+            echo "Cannot fast-forward $BR (diverged). Skipping to avoid overwriting."
+            exit 0
+          fi
+
+      - name: Push ${{ matrix.branch }} + tags
+        run: |
+          BR=${{ matrix.branch }}
+          git push origin $BR
+          git push --tags || true
