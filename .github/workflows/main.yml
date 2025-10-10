@@ -1,0 +1,45 @@
+name: Sync Fork
+
+on:
+  schedule:
+    - cron: '0 * * * *'  # Tự động chạy mỗi giờ
+  workflow_dispatch:      # Cho phép chạy thủ công từ tab Actions
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          # Cần fetch toàn bộ lịch sử để merge
+          fetch-depth: 0
+
+      - name: Sync fork with upstream repository
+        run: |
+          # Thay thế bằng URL .git của repository GỐC
+          UPSTREAM_REPO="https://github.com/VersusControl/devops-ai-guidelines.git"
+          
+          # Lấy tên branch mặc định của fork (thường là main hoặc master)
+          LOCAL_BRANCH=$(git rev-parse --abbrev-ref HEAD)
+          
+          # Cấu hình Git
+          git config --global user.name "${{ github.actor }}"
+          git config --global user.email "${{ github.actor }}@users.noreply.github.com"
+          
+          # Thêm remote cho repository gốc
+          git remote add upstream $UPSTREAM_REPO
+          git fetch upstream
+          
+          # Merge các thay đổi từ branch mặc định của repo gốc
+          # LƯU Ý: Thay 'main' nếu branch mặc định của repo gốc là 'master'
+          if git merge upstream/main; then
+            echo "Successfully merged from upstream/main."
+          else
+            echo "Merge from upstream/main failed. Trying upstream/master..."
+            git merge --abort
+            git merge upstream/master
+          fi
+          
+          # Đẩy các thay đổi lên fork của bạn
+          git push origin $LOCAL_BRANCH
